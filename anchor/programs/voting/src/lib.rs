@@ -60,6 +60,9 @@ pub mod voting {
     }
 
     pub fn vote(ctx: Context<Vote>, _candidate_name: String, _poll_id: u64) -> Result<()> {
+        let voter_record = &mut ctx.accounts.voter_record;
+        require!(voter_record.voted == false, VotingError::AlreadyVoted);
+
         let vote_record = &mut ctx.accounts.vote_record;
         
         // Check if the voter has already voted
@@ -78,7 +81,11 @@ pub mod voting {
         let candidate = &mut ctx.accounts.candidate;
         let poll = &mut ctx.accounts.poll;
         candidate.candidate_votes += 1;
+
+        voter_record.voted = true;
+
         poll.total_votes += 1; // Increment total votes for the poll
+
 
         msg!("Voted for candidate: {}", candidate.candidate_name);
         msg!("Candidate Votes: {}", candidate.candidate_votes);
@@ -108,6 +115,14 @@ pub struct Vote<'info> {
     pub candidate: Account<'info, Candidate>,
 
     #[account(
+      init_if_needed,
+      payer = signer,
+      space = 8 + VoterRecord::INIT_SPACE,
+      seeds = [poll_id.to_le_bytes().as_ref(), signer.key().as_ref()],
+      bump
+    )]
+    pub voter_record: Account<'info, VoterRecord>,
+    
         init_if_needed,
         payer = signer,
         space = 8 + VoteRecord::INIT_SPACE,
@@ -190,5 +205,16 @@ pub struct VoteRecord {
 #[error_code]
 pub enum CustomError {
     #[msg("Voter has already cast a vote in this poll")]
+    AlreadyVoted,
+}
+
+#[account]
+pub struct VoterRecord {
+    pub voted: bool,
+}
+
+#[error_code]
+pub enum VotingError {
+    #[msg("You have already voted in this poll.")]
     AlreadyVoted,
 }
